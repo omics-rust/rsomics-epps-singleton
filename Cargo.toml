@@ -1,0 +1,35 @@
+[package]
+name = "rsomics-epps-singleton"
+version = "0.1.0"
+description = "Epps-Singleton two-sample test on the empirical characteristic function — scipy.stats.epps_singleton_2samp value-exact"
+edition = "2024"
+rust-version = "1.91"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/omics-rust/rsomics-epps-singleton"
+authors = ["Zane Leong <efd@live.com>"]
+categories = ["science", "command-line-utilities"]
+keywords = ["statistics", "epps-singleton", "scipy", "nonparametric", "two-sample"]
+readme = "README.md"
+
+[[bin]]
+name = "rsomics-epps-singleton"
+path = "src/main.rs"
+
+[lib]
+name = "rsomics_epps_singleton"
+path = "src/lib.rs"
+doctest = false
+
+[dependencies]
+rsomics-common = { version = "0.6", features = ["rayon"] }
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+fast-float2 = "0.2"
+libm = "0.2"
+
+[dev-dependencies]
+criterion = { version = "0.7", default-features = false, features = ["cargo_bench_support"] }
+
+[[bench]]
+name = "epps"
+harness = false
