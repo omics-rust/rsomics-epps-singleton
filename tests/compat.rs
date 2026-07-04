@@ -36,6 +36,17 @@ fn matches_scipy_golden() {
         let y = read(&dir.join(format!("{label}_y.tsv")));
         let res = epps_singleton(&x, &y, &t).unwrap();
 
+        if want_stat.is_nan() || want_p.is_nan() {
+            assert!(
+                res.statistic.is_nan() && res.pvalue.is_nan(),
+                "case {label}: non-finite input must give nan/nan, got {}/{}",
+                res.statistic,
+                res.pvalue
+            );
+            checked += 1;
+            continue;
+        }
+
         let rs = relerr(res.statistic, want_stat);
         let rp = relerr(res.pvalue, want_p);
         assert!(
@@ -76,6 +87,42 @@ fn cli_emits_statistic_and_p() {
     );
     let stat: f64 = fields[0].parse().unwrap();
     assert!(relerr(stat, 15.177899584007768) <= 1e-10);
+}
+
+/// Non-finite input must exit cleanly with `nan<TAB>nan`, never panic (the
+/// old code panicked on NaN and hit "SVD did not converge" on inf).
+#[test]
+fn cli_non_finite_gives_nan_without_panic() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden");
+    let bin = env!("CARGO_BIN_EXE_rsomics-epps-singleton");
+    for label in ["g", "h"] {
+        let t = if label == "g" {
+            "0.4,0.8"
+        } else {
+            "0.3,0.6,0.9"
+        };
+        let out = std::process::Command::new(bin)
+            .arg(dir.join(format!("{label}_x.tsv")))
+            .arg(dir.join(format!("{label}_y.tsv")))
+            .arg(format!("--t={t}"))
+            .arg("-t1")
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "case {label}: exit {:?}, stderr {}",
+            out.status.code(),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let text = String::from_utf8(out.stdout).unwrap();
+        let fields: Vec<&str> = text.trim().split('\t').collect();
+        assert_eq!(fields.len(), 2, "case {label}: got {text:?}");
+        assert!(
+            fields[0].parse::<f64>().unwrap().is_nan()
+                && fields[1].parse::<f64>().unwrap().is_nan(),
+            "case {label}: expected nan/nan, got {text:?}"
+        );
+    }
 }
 
 #[test]

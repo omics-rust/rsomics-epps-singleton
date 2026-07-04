@@ -47,6 +47,16 @@ impl std::fmt::Display for EsError {
 /// characteristic function is sampled; the default `(0.4, 0.8)` is from Epps &
 /// Singleton (1986).
 pub fn epps_singleton(x: &[f64], y: &[f64], t: &[f64]) -> Result<EsResult, EsError> {
+    // scipy's default nan_policy='propagate' short-circuits any non-finite
+    // (NaN or ±inf) input to (nan, nan) before length/frequency validation or
+    // the SVD path — matched here so degenerate inputs never panic or diverge.
+    if x.iter().chain(y).any(|v| !v.is_finite()) {
+        return Ok(EsResult {
+            statistic: f64::NAN,
+            pvalue: f64::NAN,
+        });
+    }
+
     let nx = x.len();
     let ny = y.len();
     if nx < 5 || ny < 5 {
