@@ -1,6 +1,6 @@
 [package]
 name = "rsomics-epps-singleton"
-version = "0.1.1"
+version = "0.1.2"
 description = "Epps-Singleton two-sample test on the empirical characteristic function — scipy.stats.epps_singleton_2samp value-exact"
 edition = "2024"
 rust-version = "1.91"

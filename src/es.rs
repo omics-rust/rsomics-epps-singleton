@@ -47,10 +47,10 @@ impl std::fmt::Display for EsError {
 /// characteristic function is sampled; the default `(0.4, 0.8)` is from Epps &
 /// Singleton (1986).
 pub fn epps_singleton(x: &[f64], y: &[f64], t: &[f64]) -> Result<EsResult, EsError> {
-    // scipy's default nan_policy='propagate' short-circuits any non-finite
-    // (NaN or ±inf) input to (nan, nan) before length/frequency validation or
-    // the SVD path — matched here so degenerate inputs never panic or diverge.
-    if x.iter().chain(y).any(|v| !v.is_finite()) {
+    // scipy's default nan_policy='propagate' catches only NaN (not inf), and it
+    // fires before frequency validation, so a NaN sample short-circuits to
+    // (nan, nan) regardless of `t`.
+    if x.iter().chain(y).any(|v| v.is_nan()) {
         return Ok(EsResult {
             statistic: f64::NAN,
             pvalue: f64::NAN,
@@ -64,6 +64,17 @@ pub fn epps_singleton(x: &[f64], y: &[f64], t: &[f64]) -> Result<EsResult, EsErr
     }
     if t.iter().any(|&ti| ti <= 0.0) {
         return Err(EsError::NonPositiveT);
+    }
+
+    // An inf is not caught by nan_policy, so scipy reaches the `t > 0` check
+    // above and only then lets inf flow through the transform to (nan, nan).
+    // Short-circuiting here — after validation — reproduces both: an invalid
+    // `t` still fails loud, while a valid `t` yields (nan, nan) on inf input.
+    if x.iter().chain(y).any(|v| v.is_infinite()) {
+        return Ok(EsResult {
+            statistic: f64::NAN,
+            pvalue: f64::NAN,
+        });
     }
     let n = nx + ny;
     let k = t.len();
@@ -186,4 +197,51 @@ fn biased_cov(g: &[f64], dim: usize, ncol: usize) -> Vec<f64> {
         }
     }
     cov
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{EsError, epps_singleton};
+
+    const T: [f64; 2] = [0.4, 0.8];
+    fn s(n: usize, off: f64) -> Vec<f64> {
+        (0..n).map(|i| i as f64 + off).collect()
+    }
+
+    #[test]
+    fn nan_short_circuits_before_t_validation() {
+        // scipy nan_policy='propagate' catches NaN before the `t > 0` check.
+        let mut x = s(6, 0.0);
+        x[3] = f64::NAN;
+        let bad_t = [0.4, -0.8];
+        let r = epps_singleton(&x, &s(6, 0.0), &bad_t).unwrap();
+        assert!(r.statistic.is_nan() && r.pvalue.is_nan());
+    }
+
+    #[test]
+    fn inf_with_invalid_t_fails_loud() {
+        // inf is not caught by nan_policy, so an invalid `t` still raises.
+        let mut x = s(6, 0.0);
+        x[3] = f64::INFINITY;
+        assert!(matches!(
+            epps_singleton(&x, &s(6, 0.0), &[0.4, -0.8]),
+            Err(EsError::NonPositiveT)
+        ));
+    }
+
+    #[test]
+    fn inf_with_valid_t_propagates_nan() {
+        let mut x = s(6, 0.0);
+        x[3] = f64::INFINITY;
+        let r = epps_singleton(&x, &s(6, 0.0), &T).unwrap();
+        assert!(r.statistic.is_nan() && r.pvalue.is_nan());
+    }
+
+    #[test]
+    fn finite_with_invalid_t_fails_loud() {
+        assert!(matches!(
+            epps_singleton(&s(6, 0.0), &s(6, 0.5), &[0.4, 0.0]),
+            Err(EsError::NonPositiveT)
+        ));
+    }
 }
